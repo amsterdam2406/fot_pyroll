@@ -1,0 +1,16 @@
+[run]
+source =
+    payroll/
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __getattr__
+    raise Assert
+    raise NotImplementedError
+    if __name__ == .__main__.:
+
+omit =
+    */migrations/*
+    */tests/*
+    manage.py
