@@ -39,7 +39,11 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 SECRET_KEY = config('SECRET_KEY', default='your-secret-key-here')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# Change from:
+# ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+
+# To:
+ALLOWED_HOSTS = ['fot-pyroll.onrender.com', 'fotasco-payroll.onrender.com', 'localhost', '127.0.0.1']
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # Application definition
@@ -205,8 +209,6 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     
 ]
-
-# ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 CORS_ALLOW_CREDENTIALS = True
 
