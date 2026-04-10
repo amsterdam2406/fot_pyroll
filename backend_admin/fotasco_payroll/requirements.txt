@@ -26,3 +26,4 @@ tzdata==2025.3
 
 typing_extensions==4.15.0
 packaging==26.0
+setuptools>=70.0.0
