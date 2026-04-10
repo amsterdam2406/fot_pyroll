@@ -1,4 +1,4 @@
-Pillow==10.4.0 --only-binary=:all:
+Pillow==12.2.0 --only-binary=:all:
 asgiref==3.11.1
 certifi==2026.1.4
 cffi==2.0.0
