@@ -14,25 +14,45 @@ let deductionsTbody = null;
 let currentEditingDeductionId = null;
 let companies = [];
 let currentEditingCompanyId = null;
+let payments = [];
+let user = null;
+let loginLocked = false;
+let loginInProgress = false;
 
 console.log("Script loaded");
 
+function debounce(fn, delay = 300) {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn(...args), delay);
+    };
+}
 
-// ================================
-// UTILITY FUNCTIONS
-// ================================
 
-// function showLoading(btn, spinnerEl) {
-//     if (btn) btn.disabled = true;
-//     const spinner = spinnerEl ||document.getElementById("globalSpinner");
-//     if (spinner) spinner.classList.remove("hidden");
-// }
+function updateDashboardStats() {
+    const totalEmployees = employees?.length || 0;
 
-// function hideLoading(btn, spinnerEl) {
-//     if (btn) btn.disabled = false;
-//     const spinner = spinnerEl || document.getElementById("globalSpinner");
-//     if (spinner) spinner.classList.add("hidden");
-// }
+    const totalDeductions = (deductions || []).reduce((sum, d) => {
+        return sum + Number(d.amount || 0);
+    }, 0);
+
+    const totalSalaries = (employees || []).reduce((sum, emp) => {
+        return sum + Number(emp.salary || 0);
+    }, 0);
+
+    const netPay = totalSalaries - totalDeductions;
+
+    const totalEmployeesEl = document.getElementById("totalEmployees");
+    const totalDeductionsEl = document.getElementById("totalDeductions");
+    const totalSalariesEl = document.getElementById("totalSalaries");
+    const netPayEl = document.getElementById("netPay");
+
+    if (totalEmployeesEl) totalEmployeesEl.textContent = totalEmployees.toLocaleString();
+    if (totalDeductionsEl) totalDeductionsEl.textContent = totalDeductions.toLocaleString();
+    if (totalSalariesEl) totalSalariesEl.textContent = totalSalaries.toLocaleString();
+    if (netPayEl) netPayEl.textContent = netPay.toLocaleString();
+}
 
 
 function showLoading(btn, spinnerEl) {
@@ -131,8 +151,6 @@ function closeToast(btn) {
 
     setTimeout(() => toast.remove(), 300);
 }
-// payroll permiss
-// //=====----===
 
 
 function validateEmployeePayload(payload) {
@@ -171,9 +189,103 @@ function applyRolePermissions(user) {
 
 }
 
-// ==================
-// API WRAPPER
-// =======
+// LOAD ATTENDANCE (DRF GET API)
+async function loadAttendance() {
+    try {
+        const res = await apiRequest("/api/attendance/");
+
+        if (!res.success) {
+            throw new Error(res.message || "Failed to fetch attendance");
+        }
+
+        const list = res.data?.results || res.data || [];
+        const tbody = document.getElementById("attendanceTableBody");
+
+        if (!tbody) return;
+
+        tbody.replaceChildren();
+
+        list.forEach(att => {
+            const row = document.createElement("tr");
+
+            row.innerHTML = `
+                <td>${att.date || "-"}</td>
+                <td>${att.employee_id || "-"}</td>
+                <td>${att.employee_name || "-"}</td>
+                <td>${att.clock_in_display || att.clock_in || "-"}</td>
+                <td>${att.clock_out_display || att.clock_out || "-"}</td>
+                <td>${att.status || "-"}</td>
+                <td>
+                    ${att.clock_in_photo 
+                        ? `<img src="${att.clock_in_photo}" width="40" alt="clock in">`
+                        : "-"
+                    }
+                </td>
+            `;
+
+            tbody.appendChild(row);
+        });
+
+    } catch (err) {
+        console.error("Load attendance error:", err);
+        showToast(err.message || "Failed to load attendance", "error");
+    }
+}
+
+
+async function handleClockIn(e) {
+    e.preventDefault();
+
+    const action = document.getElementById("clockAction").value;
+    const employeeId = document.getElementById("clockEmployee").value;
+
+    if (!employeeId) {
+        showToast("Select an employee", "warning");
+        return;
+    }
+
+    if (!capturedImageBlob) {
+        showToast("Please capture a photo first", "warning");
+        return;
+    }
+
+    const url = action === "out"
+        ? "/api/attendance/clock_out_with_photo/"
+        : "/api/attendance/clock_in_with_photo/";
+
+    try {
+        const photo = await blobToDataUrl(capturedImageBlob);
+
+        const res = await apiRequest(url, {
+            method: "POST",
+            body: {
+                employee_id: employeeId,
+                photo: photo
+            }
+        });
+
+        if (!res.success) {
+            throw new Error(res.message || "Attendance failed");
+        }
+
+        showToast(res.data?.message || "Attendance recorded", "success");
+
+        // reset UI
+        capturedImageBlob = null;
+        document.getElementById("capturedImage").innerHTML = "";
+        document.getElementById("captureBtn").disabled = true;
+        document.getElementById("submitClockBtn").disabled = true;
+
+        closeModal("clockInModal");
+
+        await loadAttendance();
+
+    } catch (err) {
+        console.error("Clock in error:", err);
+        showToast(err.message || "Attendance error", "error");
+    }
+}
+
 
 async function startCamera() {
     const video = document.getElementById("cameraVideo");
@@ -188,24 +300,25 @@ async function startCamera() {
         document.getElementById("captureBtn").disabled = false;
 
     } catch (err) {
+        console.error("Camera error:", err);
         showToast("Camera access denied", "error");
     }
 }
 
 function capturePhoto() {
-
     const video = document.getElementById("cameraVideo");
     const canvas = document.getElementById("cameraCanvas");
     const preview = document.getElementById("capturedImage");
-    const submitBtn = document.getElementById("submitClockBtn")
+    const submitBtn = document.getElementById("submitClockBtn");
 
     if (!video || !canvas || !preview) {
         console.error("Camera elements not found");
+        showToast("Camera setup error", "error");
         return;
     }
 
     if (video.videoWidth === 0 || video.videoHeight === 0) {
-        alert("Camera not ready yet. Please wait.");
+        showToast("Camera not ready yet", "warning");
         return;
     }
 
@@ -215,15 +328,14 @@ function capturePhoto() {
     const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    canvas.toBlob(
-        (blob) => {
-            if (!blob) {
-                console.error("Failed to capture image");
-                showToast("Failed to capture image", "error");
-                return;
-            }
-            // capturedPhoto = blob;
-            capturedImageBlob = blob;
+    canvas.toBlob((blob) => {
+        if (!blob) {
+            console.error("Failed to capture image");
+            showToast("Failed to capture image", "error");
+            return;
+        }
+
+        capturedImageBlob = blob;
 
         const img = document.createElement("img");
         img.src = URL.createObjectURL(blob);
@@ -233,13 +345,20 @@ function capturePhoto() {
         preview.innerHTML = "";
         preview.appendChild(img);
 
-        if (submitBtn) {
-            submitBtn.disabled = false;
-        }
-    },
-    "image/jpeg", 
-    0.8
-    );
+        if (submitBtn) submitBtn.disabled = false;
+
+    }, "image/jpeg", 0.8);
+}
+
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+
+        reader.readAsDataURL(blob);
+    });
 }
 
 
@@ -255,30 +374,30 @@ function logout() {
 }
 
 async function apiRequest(url, options = {}) {
-    // Prevent double submission if a button is already disabled
-    if (options.button?.disabled) return { success: false, message: "Action already in progress" };
+    if (options.button?.disabled) {
+        return { success: false, message: "Action already in progress" };
+    }
+    
+    const token = localStorage.getItem("accessToken");
 
     const headers = {
         ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-        ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
         ...options.headers
     };
 
-    if (options.button) options.button.disabled = true;
-
-    if (options.body && typeof options.body === "object") {
+    if (options.body && typeof options.body === "object" && !(options.body instanceof FormData)) {
         options.body = JSON.stringify(options.body);
     }
 
     try {
         const response = await fetch(url, {
             method: options.method || "GET",
-            credentials: "include", // include refresh token cookie
             headers,
             body: options.body || null
         });
 
-        // If token expired, attempt to refresh and retry
+        // Handle token expiry
         if (response.status === 401) {
             const refreshed = await refreshAccessToken();
             if (refreshed) return apiRequest(url, options);
@@ -289,20 +408,13 @@ async function apiRequest(url, options = {}) {
 
         const data = await response.json().catch(() => ({}));
 
-        if (!response.ok) {
-            const errorMessage = Array.isArray(data.error)
-                ? data.error.join(" ")
-                : data.detail || data.error || "Request failed";
-            return { success: false, message: errorMessage };
-        }
-
-        return { success: true, data };
+        return response.ok
+            ? { success: true, data }
+            : { success: false, message: data.detail || data.error || "Request failed" };
 
     } catch (err) {
-        // Catch network errors or unexpected issues
-        return { success: false, message: err.message || "Unknown error" };
-    } finally {
-        if (options.button) options.button.disabled = false;
+        console.error("API error:", err);
+        return { success: false, message: err.message || "Network error" };
     }
 }
 
@@ -323,17 +435,21 @@ async function loadEmployees(page=1) {
         if (!res.success) throw new Error(res.message);
         employees = res.data?.results || res.data || [];
         renderEmployees(employees);
-        // populate dropdowns for other modals
-        populateEmployeeSelect("clockEmployee");
-        populateEmployeeSelect("deductionEmployee");
-        populateEmployeeSelect("paymentEmployee");
-        populateEmployeeSelect("payslipEmployee");
-
-        updateDashboardStats();
-        renderPayments();
+        updateUIAfterEmployeeLoad();
     } catch (err) { 
-        showToast(`Failed to load employees: ${err.message}`, 'error');
-        }
+        showToast(`Failed to load employees: ${err.message}`, "error");
+    }
+}
+
+
+function updateUIAfterEmployeeLoad() {
+    populateEmployeeSelect("clockEmployee");
+    populateEmployeeSelect("deductionEmployee");
+    populateEmployeeSelect("paymentEmployee");
+    populateEmployeeSelect("payslipEmployee");
+
+    updateDashboardStats();
+    if (typeof renderPayments === "function") renderPayments();
 }
 
 async function loadCompanies() {
@@ -415,7 +531,7 @@ async function handleDelete(id) {
     try {
         const res =await apiRequest(`/api/employees/${id}/`, { method: "DELETE" });
         if (!res.success) throw new Error(res.message);
-        loadEmployees();
+        await loadEmployees();
         updateDashboardStats();
         showToast('Employee deleted successfully', 'success');
     } catch (err) {
@@ -442,18 +558,25 @@ async function handleCreateEmployee(e) {
     try {
         // run prooduction vali
         validateEmployeePayload(payload);
-        updateDashboardStats();
 
         if (typeof showLoading === "function") {
             showLoading(document.getElementById("createEmployeeBtn"),
             document.getElementById("addEmployeeSpinner")
         );
-        }
-
-    await apiRequest("/api/employees/", {
+        
+    }
+    const res = await apiRequest("/api/employees/", {
             method: "POST",
             body: payload
         });
+            if (!res.success) {
+                throw new Error(res.message);
+            }
+
+    // await apiRequest("/api/employees/", {
+    //         method: "POST",
+    //         body: payload
+    //     });
 
         showToast("Employee created successfully!", 'success');
         loadEmployees();
@@ -537,8 +660,8 @@ async function deleteDeduction(id) {
         if (!res.success) throw new Error(res.message);
 
         showToast("Deduction deleted successfully", "success");
-        loadDeductions();
-        loadEmployees();
+        await loadDeductions();
+        await loadEmployees();
         updateDashboardStats();
 
     } catch (err) {
@@ -611,6 +734,21 @@ function editDeduction(id) {
     document.getElementById("editDeductionReason").value = deduction.reason;
 }
 
+function populateEmployeeSelect(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    select.innerHTML = '<option value="">Select Employee</option>';
+
+    employees.forEach(emp => {
+        const option = document.createElement("option");
+        option.value = emp.id;
+        option.textContent = `${emp.name} (${emp.type})`;
+        select.appendChild(option);
+    });
+}
+
+
 // Submit edited deduction
 async function updateDeduction(e) {
     e.preventDefault();
@@ -654,102 +792,35 @@ async function updateDeduction(e) {
     }
 }
 
-async function handleClockIn(e) {
-    e.preventDefault();
-
-    const action = document.getElementById("clockAction").value;
-    const employeeId = document.getElementById("clockEmployee").value;
-
-    if (!capturedImageBlob) {
-        showToast("Please capture a photo first", "warning");
-        return;
-    }
-
-    if (!employeeId) {
-        showToast("Select an employee", "warning");
-        return;
-    }
-
-
-    let url = "/api/attendance/clock_in_with_photo/";
-
-    if (action === "out") {
-        url = "/api/attendance/clock_out_with_photo/";
-    }
-
-    try {
-        const photo = await blobToDataUrl(capturedImageBlob);
-        const res = await apiRequest(url, {
-            method: "POST",
-            body: { employee_id: employeeId, photo }
-        });
-
-        if (!res.success) throw new Error(res.message || "Attendance failed");
-
-        showToast(res.data?.message || "Attendance recorded", "success");
-        capturedImageBlob = null;
-        document.getElementById("capturedImage").innerHTML = "";
-        document.getElementById("captureBtn").disabled = true;
-        document.getElementById("submitClockBtn").disabled = true;
-
-        closeModal("clockInModal");
-        await loadAttendance();
-
-    } catch (err) {
-        showToast(err.message, "error");
-    }
-}
-
-function blobToDataUrl(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
-}
-
-
-    function populateEmployeeSelect(selectId) {
-        const select = document.getElementById(selectId);
-        if (!select) return;
-        select.innerHTML = "";
-        employees.forEach(emp => {
-            const opt = document.createElement("option");
-            opt.value = emp.id;
-            opt.textContent = `${emp.name} (${emp.type})`;
-            select.appendChild(opt);
-    });
-}
-
 // ================================
 // EMPLOYEE TABLE RENDERING
 
 
-    function renderEmployees(list) {
-        if (!tbody) return;
-        tbody.innerHTML = "";
-        list.forEach(emp => {
+    function renderEmployees(list = []) {
+        const tableBody = document.getElementById("employeesTableBody");
+        if (!tableBody) return;
 
+        tableBody.innerHTML = "";
+        list.forEach(emp => {
+            if (!emp) return;
             const row = document.createElement("tr");
 
             row.innerHTML = `
-                <td>${emp.employee_id || emp.id}</td>
-                <td>${emp.name}</td>
-                <td>${emp.type}</td>
-                <td>${emp.location}</td>
-                <td>${emp.bank_name}</td>
-                <td>₦${Number(emp.salary).toLocaleString()}</td>
+                <td>${emp.employee_id ?? emp.id ?? "-"}</td>
+                <td>${emp.name ?? "-"}</td>
+                <td>${emp.type ?? "-"}</td>
+                <td>${emp.location ?? "-"}</td>
+                <td>${emp.bank_name ?? "-"}</td>
+                <td>₦${Number(emp.salary ?? 0).toLocaleString()}</td>
                 <td>${emp.status || "Active"}</td>
                 <td>
-                    <button type="button" onclick="showIndividualPaymentModal('${emp.id}')">Pay</button>
+                    <button type="button" onclick="initiateIndividualPayment('${emp.id}')">Pay</button>
                     <button type="button" onclick="showSackEmployeeModal('${emp.id}')">Sack</button>
                     <button type="button" onclick="handleDelete('${emp.id}')">Delete</button>
                 </td>
             `;
 
-            tbody.appendChild(row);
-
+            tableBody.appendChild(row);
         });
     }
 
@@ -1060,15 +1131,29 @@ function clearAllNotifications() {
 // ================================
 // LOGIN HANDLER
 // ================================
-
 async function handleLogin(e) {
     e.preventDefault();
+
+    if (loginLocked) {
+        showToast("Too many failed attempts. Try again later.", "error");
+        return;
+    }
+
+    if (loginInProgress) return;
+
+    loginLocked = true;
+    loginInProgress = true;
+
+    setTimeout(() => {
+        loginLocked = false;
+    }, 5 * 60 * 1000);
 
     const username = document.getElementById("loginUsername").value.trim();
     const password = document.getElementById("loginPassword").value.trim();
 
     if (!username || !password) {
         showToast("Username and password required", "error");
+        loginInProgress = false;
         return;
     }
 
@@ -1076,7 +1161,6 @@ async function handleLogin(e) {
         const response = await fetch("/api/login/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            credentials: "include",
             body: JSON.stringify({ username, password })
         });
 
@@ -1085,39 +1169,46 @@ async function handleLogin(e) {
         if (!response.ok) {
             throw new Error(data.error || "Login failed");
         }
-
-//       Save access token
+        // localStorage.setItem("accessToken", data.access);
         accessToken = data.access;
-        sessionStorage.setItem("isLoggedIn", "true");
-        sessionStorage.setItem("accessToken", data.access);
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("accessToken", data.access);
+        // window.accessToken = data.access;
 
-    // dashboard
+        // localStorage.setItem("isLoggedIn", "true");
+
+        localStorage.setItem("accessToken", data.access);
+        localStorage.setItem("refreshToken", data.refresh);
+
+        sessionStorage.setItem("accessToken", data.access);
+        sessionStorage.setItem("isLoggedIn", "true");
+
+        accessToken = data.access;
+        windows.accessToken = data.access;
+        
+
+
         document.getElementById("loginPage").classList.add("hidden");
         document.getElementById("dashboardPage").classList.remove("hidden");
-
-        //Load user and data
+    
+        
         await loadCurrentUser();
-        await loadEmployees(); // waits for employees to load
-        populateEmployeeSelect("clockEmployee");
-        populateEmployeeSelect("deductionEmployee");
-        populateEmployeeSelect("paymentEmployee");
-        populateEmployeeSelect("payslipEmployee");
+        await loadEmployees();
         await loadDeductions();
         await loadAttendance();
-        if (typeof loadPaymentHistory === "function") await loadPaymentHistory();
-        if (typeof loadNotifications === "function") await loadNotifications();
         await loadSackedEmployees();
-        if (currentUser?.is_superuser || currentUser?.role === "admin" || currentUser?.is_company_admin) {
+
+        if (currentUser?.is_superuser ||
+            currentUser?.role === "admin" ||
+            currentUser?.is_company_admin
+        ) {
             await loadCompanies();
         }
 
         showToast("Login Successful", "success");
-
     } catch (err) {
         console.error(err);
         showToast(err.message, "error");
+    } finally {
+        loginInProgress = false;
     }
 }
 
@@ -1125,11 +1216,35 @@ async function handleLogin(e) {
 // ================================
 // PAGE LOAD DOMcont
 // ================================
-document.addEventListener("DOMContentLoaded", () => {
-    initEmployeeSearch();
-    accessToken = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
-    tbody = document.getElementById("employeeTableBody");
+document.addEventListener("DOMContentLoaded", async () => {
+    tbody = document.getElementById("employeesTableBody");
     deductionsTbody = document.getElementById("deductionsTableBody");
+
+    const storedToken = localStorage.getItem("accessToken") || 
+                        sessionStorage.getItem("accessToken");
+    if (storedToken) {
+        accessToken = storedToken;
+        console.log("Token loaded from storage:", accessToken ? "Yes" : "No");
+    }
+
+    function initEmployeeSearch() {
+    const input = document.getElementById("employeeSearch");
+    if (!input) return;
+
+    input.addEventListener("input", debounce((e) => {
+        const value = e.target.value.toLowerCase();
+
+        const filtered = employees.filter(emp =>
+            emp.name?.toLowerCase().includes(value) ||
+            emp.type?.toLowerCase().includes(value)
+        );
+
+        renderEmployees(filtered);
+    }, 300));
+}
+
+
+    initEmployeeSearch();
 
     const hamburger = document.getElementById("hamburgerBtn");
     const sidebar = document.getElementById("sidebar");
@@ -1142,49 +1257,59 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         document.addEventListener("click", (e) => {
-            if (!sidebar.contains(e.target) && !hamburger.contains(e.target)){
+            if (!sidebar.contains(e.target) && !hamburger.contains(e.target)) {
                 sidebar.classList.remove("active");
             }
         });         
     }
+    
+    const isLoggedInStorage = localStorage.getItem("isLoggedIn") || sessionStorage.getItem("isLoggedIn");
+    let isLoggedIn = false;
+    if (isLoggedInStorage) {
+        if (accessToken) {
+            isLoggedIn = true;
+        } else {
+            isLoggedIn = await refreshAccessToken();
+        }
 
-    if (localStorage.getItem("isLoggedIn") || sessionStorage.getItem("isLoggedIn")) {
-        Promise.resolve(Boolean(accessToken) || refreshAccessToken()).then(async (isLoggedIn) => {
+        if (isLoggedIn) {
+            console.log("User is logged in, loading dashboard...");
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('dashboardPage').classList.remove('hidden');
+            await loadCurrentUser();
 
-            if (isLoggedIn) {
+            if (tbody) await loadEmployees();
+            await loadDeductions();
+            await loadAttendance();
 
-                document.getElementById('loginPage').classList.add('hidden');
-                document.getElementById('dashboardPage').classList.remove('hidden');
+            if (typeof loadPaymentHistory === "function") await loadPaymentHistory();
+            if (typeof loadNotifications === "function") await loadNotifications();
 
-                await loadCurrentUser();
-
-                if (tbody) {
-                    await loadEmployees();
-                }
-
-                await loadDeductions();
-                await loadAttendance();
-                if (typeof loadPaymentHistory === "function") await loadPaymentHistory();
-                if (typeof loadNotifications === "function") await loadNotifications();
-                await loadSackedEmployees();
-                if (currentUser?.is_superuser || currentUser?.role === "admin" || currentUser?.is_company_admin) {
-                    await loadCompanies();
-                }
-
+            await loadSackedEmployees();
+            
+            if (currentUser?.is_superuser || currentUser?.role === "admin" || currentUser?.is_company_admin) {
+                await loadCompanies();
             }
-        });
+        }
+    }
+
+    if (!isLoggedIn) {
+        localStorage.removeItem("isLoggedIn");
+        sessionStorage.removeItem("isLoggedIn");
+        
+        document.getElementById("dashboardPage").classList.add("hidden");
+        document.getElementById("loginPage").classList.remove("hidden");
+
+        console.log("Token invalid or expired, showing login page");
     }
 
     const clockForm = document.getElementById("clockInForm");
-
-    if (clockForm) {
+    if (clockForm) 
         clockForm.addEventListener("submit", handleClockIn);
-    }
 
     const individualPaymentForm = document.getElementById("individualPaymentForm");
-    if (individualPaymentForm) {
+    if (individualPaymentForm) 
         individualPaymentForm.addEventListener("submit", handleIndividualPaymentSubmit);
-    }
 
     const sackForm = document.getElementById("sackEmployeeForm");
     if (sackForm) {
@@ -1198,26 +1323,110 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Existing employee load
     // if (tbody) loadEmployees().then(() => populateDeductionEmployeeSelect());
-
     const deductionForm = document.getElementById("addDeductionForm");
     if (deductionForm) deductionForm.addEventListener("submit", addDeduction);
     const editForm = document.getElementById("editDeductionForm");
     if (editForm) editForm.addEventListener("submit", updateDeduction);
 });
+    
 
+async function loadPaymentHistory() {
+    const tbody = document.getElementById("historyTableBody");
+    if (!tbody) return;
 
+    try {
+        const res = await apiRequest("/api/payments/");
+        if (!res.success) throw new Error(res.message);
+
+        const list = res.data?.results || res.data || [];
+        tbody.innerHTML = "";
+
+        list.forEach(payment => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${payment.payment_date || "-"}</td>
+                <td>${payment.employee_id || payment.employee || "-"}</td>
+                <td>${payment.employee_name || "-"}</td>
+                <td>${payment.bank_account || "-"}</td>
+                <td>₦${Number(payment.net_amount || 0).toLocaleString()}</td>
+                <td>${payment.payment_method || "-"}</td>
+                <td>${payment.status || "-"}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    } catch (err) {
+        console.error(err);
+        showToast("Failed to load payment history", "error");
+    }
+}
+
+async function loadNotifications() {
+    const container = document.getElementById("notificationsList");
+    if (!container) return;
+
+    try {
+        const res = await apiRequest("/api/notifications/");
+        if (!res.success) throw new Error(res.message);
+
+        const list = res.data?.results || res.data || [];
+        container.innerHTML = "";
+
+        if (!list.length) {
+            container.innerHTML = "<p>No notifications yet.</p>";
+            return;
+        }
+
+        list.forEach(notification => {
+            const item = document.createElement("div");
+            const type = notification?.type || "info";
+            const createdAt = notification?.created_at
+                ? new Date(notification.created_at).toLocaleString()
+                : "";
+
+            item.className = `notification ${type}`;
+
+            const title = document.createElement("strong");
+            title.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+
+            const message = document.createElement("p");
+            message.textContent = notification?.message || "";
+
+            item.appendChild(title);
+            item.appendChild(message);
+
+            if (createdAt) {
+                const time = document.createElement("div");
+                time.className = "time";
+                time.textContent = createdAt;
+                item.appendChild(time);
+            }
+
+            container.appendChild(item);
+        });
+    } catch (err) {
+        container.innerHTML = "<p>Failed to load notifications.</p>";
+        showToast(`Failed to load notifications: ${err.message}`, "error");
+    }
+}
 
 async function refreshAccessToken() {
     try {
+        const refreshToken = localStorage.getItem("refreshToken");
+
+        if (!refreshToken) {
+            return false;
+        }
 
         const res = await fetch("/api/token/refresh/", {
             method: "POST",
-            credentials: "include"
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh: refreshToken })
         });
 
         if (!res.ok) return false;
 
         const data = await res.json();
+
         accessToken = data.access;
         sessionStorage.setItem("accessToken", data.access);
         localStorage.setItem("accessToken", data.access);
@@ -1225,8 +1434,6 @@ async function refreshAccessToken() {
         return true;
 
     } catch (err) {
-
         return false;
-
     }
 }

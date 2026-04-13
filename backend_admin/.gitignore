@@ -33,3 +33,8 @@ Thumbs.db
 .mypy_cache/
 .coverage
 htmlcov/
+
+staticfiles/
+staticfiles
+staticfile
+staticfile/
