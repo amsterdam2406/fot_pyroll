@@ -1182,7 +1182,8 @@ async function handleLogin(e) {
         sessionStorage.setItem("isLoggedIn", "true");
 
         accessToken = data.access;
-        windows.accessToken = data.access;
+        // windows.accessToken = data.access;
+        
         
 
 
