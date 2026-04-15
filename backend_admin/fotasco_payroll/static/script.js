@@ -1182,14 +1182,11 @@ async function handleLogin(e) {
         sessionStorage.setItem("isLoggedIn", "true");
 
         accessToken = data.access;
-        // windows.accessToken = data.access;
-        
         
 
 
         document.getElementById("loginPage").classList.add("hidden");
         document.getElementById("dashboardPage").classList.remove("hidden");
-    
         
         await loadCurrentUser();
         await loadEmployees();

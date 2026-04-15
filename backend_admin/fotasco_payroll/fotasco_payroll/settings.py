@@ -16,7 +16,9 @@ from pathlib import Path
 from decouple import config
 from datetime import timedelta
 import sys
+import dj_database_url
 import logging.config
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -51,11 +53,8 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
 
-# Change from:
-# ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
-# To:
-ALLOWED_HOSTS = ['fot-pyroll.onrender.com', 'fotasco-payroll.onrender.com', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['fot-pyroll.onrender.com', 'fotasco-payroll.onrender.com', 'dpg-d7en59hf9bms739ngbpg-a', '127.0.0.1']
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # Application definition
@@ -117,26 +116,14 @@ TEMPLATES = [
 WSGI_APPLICATION = 'fotasco_payroll.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='fotasco_payroll'),
-        'USER': config('DB_USER', default='postgres'),
-        'PASSWORD': config('DB_PASSWORD', default='fotasco123'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL'),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -240,7 +227,7 @@ EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='payroll@fotasco.com') ##payrollmail
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='amsatlolade@gmail.com') ##payrollmail
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
