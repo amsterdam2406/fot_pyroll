@@ -19,7 +19,7 @@ gunicorn==21.2.0
 idna==3.11
 iniconfig==2.3.0
 packaging==26.0
-paystackapi
+paystack==1.5.0
 platformdirs==4.9.2
 pluggy==1.6.0
 psycopg==3.3.2
