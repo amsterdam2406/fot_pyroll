@@ -19,7 +19,6 @@ gunicorn==21.2.0
 idna==3.11
 iniconfig==2.3.0
 packaging==26.0
-paystack-python==0.1
 paystackapi
 platformdirs==4.9.2
 pluggy==1.6.0
@@ -43,6 +42,4 @@ urllib3==2.6.3
 virtualenv==20.37.0
 waitress==3.0.2
 whitenoise==6.6.0
-dj-database-url==3.1.2
-dj-database-url
 Pillow==10.4.0 --only-binary :all:
