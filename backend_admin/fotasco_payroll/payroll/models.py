@@ -51,8 +51,11 @@ class Employee(models.Model):
     STATUS_CHOICES = [
         ('active', 'Active'),
         ('terminated', 'Terminated'),
+        ('sacked', 'Sacked'),
+        ('resigned', 'Resigned'),
     ]
     
+    id_sequence = models.PositiveIntegerField(editable=False, null=True, blank=True)
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee_id = models.CharField(max_length=20, unique=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employee_profile')
@@ -76,36 +79,56 @@ class Employee(models.Model):
     class Meta:
         db_table = 'employees'
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['employee_id'],
+                name='unique_employee_id',
+                violation_error_message='Employee ID must be unique.'
+            ),
+        ]
     
     def __str__(self):
         return f"{self.employee_id} - {self.name}"
     
-    def save(self, *args, **kwargs):
-        if not self.employee_id:
-            with transaction.atomic():
-                # Auto-generate employee ID
-                last_employee = (
-                    Employee.objects.select_for_update()
-                    .filter(type=self.type)
-                    .order_by('-created_at')
-                    .first()
-                )
-                if last_employee and last_employee.employee_id:
-                    numbers = re.findall(r'\d+', last_employee.employee_id)
-                    last_number = int(numbers[0]) if numbers else 0
-                    next_number = last_number + 1
-                else:
-                    next_number = 1
-            if self.type == 'staff':
-                prefix = 'FSS'
-                suffix = 'Staff'
-            elif self.type == 'guard':
-                prefix = 'FSS'
-                suffix = 'Guard'
+    def generate_employee_id(self):
+        """
+        Generate unique employee ID format:
+        Staff: FSS-001-STAFF, FSS-002-STAFF...
+        Guard: FSS-001-GRD, FSS-002-GRD...
+        """
+        with transaction.atomic():
+            # Get the global last sequence number (shared between staff and guards)
+            last_employee = Employee.objects.select_for_update().order_by('-id_sequence').first()
+            
+            if last_employee and last_employee.id_sequence:
+                next_sequence = last_employee.id_sequence + 1
             else:
-                prefix = 'EMP'
-                suffix = 'Employee'
-            self.employee_id = f"{prefix}{str(next_number).zfill(4)} {suffix}"
+                # Start from 1 if no employees exist
+                next_sequence = 1
+            
+            # Format based on type
+            if self.type == 'staff':
+                suffix = 'STAFF'
+            elif self.type == 'guard':
+                suffix = 'GRD'
+            else:
+                suffix = 'EMP'
+            
+            # Format: FSS-001-STAFF (sequence padded to 3 digits)
+            employee_id = f"FSS-{str(next_sequence).zfill(3)}-{suffix}"
+            
+            # CRITICAL: Check if this ID somehow exists (shouldn't happen with atomic)
+            while Employee.objects.filter(employee_id=employee_id).exists():
+                next_sequence += 1
+                employee_id = f"FSS-{str(next_sequence).zfill(3)}-{suffix}"
+            
+            self.id_sequence = next_sequence
+            return employee_id
+    
+    def save(self, *args, **kwargs):
+        # Only generate ID if not set (prevents regeneration on updates)
+        if not self.employee_id:
+            self.employee_id = self.generate_employee_id()
         super().save(*args, **kwargs)
 
 class Attendance(models.Model):
@@ -159,6 +182,8 @@ class Deduction(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('applied', 'Applied'),
+        ('cancelled', 'Cancelled'),      # ADDED: For manual cancellation
+        ('terminated', 'Terminated'),    # ADDED: For terminated employees
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -212,6 +237,33 @@ class Payment(models.Model):
         db_table = 'payments'
         ordering = ['-payment_date']
     
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        old_status = None
+        if not is_new:
+            try:
+                old_payment = Payment.objects.get(pk=self.pk)
+                old_status = old_payment.status
+            except Payment.DoesNotExist:
+                old_status = None
+        
+        super().save(*args, **kwargs)
+        
+        if not is_new and old_status != 'completed' and self.status == 'completed':
+            self.apply_pending_deductions()
+    
+    def apply_pending_deductions(self):
+        """Apply all pending deductions for this employee"""
+        from django.db import transaction
+        with transaction.atomic():
+            pending_deductions = Deduction.objects.filter(
+                employee=self.employee,
+                status='pending'
+            )
+            for deduction in pending_deductions:
+                deduction.status = 'applied'
+                deduction.save()
+    
     def __str__(self):
         return f"{self.employee.employee_id} - ₦{self.net_amount}"
 
@@ -220,6 +272,8 @@ class Company(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=200)
     location = models.CharField(max_length=200)
+    contact_number = models.CharField(max_length=15, blank=True, null=True)
+    contact_email = models.EmailField(blank=True, null=True)
     guards_count = models.IntegerField(validators=[MinValueValidator(1)])
     payment_to_us = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     payment_per_guard = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])

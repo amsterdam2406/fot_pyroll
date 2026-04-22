@@ -35,3 +35,8 @@ Thumbs.db
 htmlcov/
 # dedc att
 backend_admin\fotasco_payroll\payroll\attendance_deductions.py"
+media/
+.env
+__pycache__/
+*.pyc
+db.sqlite3

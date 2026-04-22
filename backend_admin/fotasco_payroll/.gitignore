@@ -1,0 +1,55 @@
+<<<<<<< HEAD
+.env 
+=======
+>>>>>>> 0bc6b45763a08a1e1c694855209a7b150da1cf83
+# Environment
+.env
+
+# Virtual environments
+venv/
+venv-/
+.venv/
+env/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Local DB
+db.sqlite3
+
+# Logs
+*.log
+
+# Frontend build & deps
+node_modules/
+dist/
+build/
+
+# IDE / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Python tooling
+.tox/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+<<<<<<< HEAD
+
+staticfiles/
+staticfiles
+staticfile
+staticfile/
+
+media/
+.env
+__pycache__/
+*.pyc
+db.sqlite3
+=======
+# dedc att
+backend_admin\fotasco_payroll\payroll\attendance_deductions.py"
+>>>>>>> 0bc6b45763a08a1e1c694855209a7b150da1cf83

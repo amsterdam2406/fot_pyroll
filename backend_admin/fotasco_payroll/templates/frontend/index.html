@@ -1,23 +1,15 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
-    <head>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fotasco Security Services - Payroll Management System</title>
     <link rel="icon" href="{% static 'no_bggg.png' %}" type="image/png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-        <link rel="stylesheet" href="{% static 'style.css' %}">
-        <style>
-            @media (max-width: 768px) {
-                #sidebar.active {
-                    left: 0 !important;
-                    transform: translateX(0) !important;
-                }
-            }
-        </style>
-    </head>
+    <link rel="stylesheet" href="{% static 'style.css' %}">
+</head>
 <body>
     <!-- Login Page -->
     <div id="loginPage" class="page-container">
@@ -29,17 +21,15 @@
                 <h1>Fotasco Security Services</h1>
                 <p>Management System</p>
             </div> 
-            <!-- <form id="loginForm" class="login-form">-->
-            <!-- <form method="POST" id="loginForm" class="login-form"> -->
             <form id="loginForm" method="POST" action="javascript:void(0);" onsubmit="handleLogin(event); return false;">
                 {% csrf_token %}
                 <div class="form-group">
                     <label for="loginUsername"><i class="fas fa-user"></i> Username</label>
-                    <input type="text" id="loginUsername" name="username" placeholder="Enter username" required>
+                    <input type="text" id="loginUsername" name="username" placeholder="Enter username" required autocomplete="username">
                 </div>
                 <div class="form-group">
                     <label for="loginPassword"><i class="fas fa-lock"></i> Password</label>
-                    <input type="password" id="loginPassword" name="password" placeholder="Enter password" required>
+                    <input type="password" id="loginPassword" name="password" placeholder="Enter password" required autocomplete="current-password">
                 </div>
                 <button type="submit" id="loginBtn" class="btn btn-primary btn-block">
                     <i class="fas fa-sign-in-alt"></i> Login
@@ -47,11 +37,12 @@
             </form>
         </div>
     </div>
+
     <!-- Main Dashboard -->
     <div id="dashboardPage" class="page-container hidden">
         <!-- Top Navigation -->
         <nav class="top-nav">
-            <button type="button" class="hamburger" id="hamburgerBtn" onclick="document.getElementById('sidebar')?.classList.toggle('active');">
+            <button type="button" class="hamburger" id="hamburgerBtn">
                 <i class="fas fa-bars"></i>
             </button>
             <div class="nav-brand">
@@ -59,9 +50,7 @@
                 <span>Fotasco Security Services</span>
             </div>
             <div class="nav-user">
-                <span id="currentUserName">
-                    <!-- {{ request.user.get_full_name|default:request.user.username}} -->
-                </span>
+                <span id="currentUserName"></span>
                 <button type="button" onclick="logout()" class="btn btn-sm btn-danger">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
@@ -156,719 +145,806 @@
                     <div id="recentActivityList" class="activity-list"></div>
                 </div>
             </section>
-            <!-- End payment-section -->
 
-            <!-- Companies Section -->
+            <!-- Employees Section -->
             <div id="admin-controls-employee">
-            <div id="employee-section">
-            <section class="content-section" id="employees">
-                <div class="section-header">
-                    <h2><i class="fas fa-users"></i> Employee Management</h2>
-                    <button id="addEmployeeBtn" onclick="showAddEmployeeModal()" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Add Employee
-                    </button>
+                <div id="employee-section">
+                    <section class="content-section" id="employees">
+                        <div class="section-header">
+                            <h2><i class="fas fa-users"></i> Employee Management</h2>
+                            <button id="addEmployeeBtn" onclick="showAddEmployeeModal()" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Add Employee
+                            </button>
+                        </div>
+
+                        <div class="filter-bar">
+                            <label for="employeeSearch">Search Employees</label>
+                            <input type="text" id="employeeSearch" placeholder="Search employees..." class="search-input">
+                            <select id="employeeTypeFilter" class="filter-select">
+                                <option value="all">All Types</option>
+                                <option value="staff">Staff</option>
+                                <option value="guard">Guard</option>
+                            </select>
+                            <button onclick="exportAllEmployees()" class="btn btn-success">
+                                <i class="fas fa-file-export"></i> Export
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Type</th>
+                                        <th>Location</th>
+                                        <th>Bank</th>
+                                        <th>Salary</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="employeeTableBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- Attendance Section -->
+                    <section class="content-section" id="attendance">
+                        <div class="section-header">
+                            <h2><i class="fas fa-camera"></i> Attendance Management</h2>
+                            <div class="btn-group">
+                                <button onclick="openModal('clockInModal')" class="btn btn-primary">
+                                    <i class="fas fa-clock"></i> Clock In/Out
+                                </button>
+                                <!-- ADDED: On Leave Button -->
+                                <button onclick="showLeaveModal()" class="btn btn-warning">
+                                    <i class="fas fa-umbrella-beach"></i> Mark On Leave
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="attendance-summary">
+                            <div class="summary-card">
+                                <h4>Present Today</h4>
+                                <p id="presentToday">0</p>
+                            </div>
+                            <div class="summary-card">
+                                <h4>Absent Today</h4>
+                                <p id="absentToday">0</p>
+                            </div>
+                            <div class="summary-card">
+                                <h4>On Leave</h4>
+                                <p id="onLeave">0</p>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Clock In</th>
+                                        <th>Clock Out</th>
+                                        <th>Status</th>
+                                        <th>Selfies</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="attendanceTableBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
                 </div>
 
-                <div class="filter-bar">
-                    <label for="employeeSearch">Search Employees</label>
-                    <input type="text" id="employeeSearch" placeholder="Search employees..." class="search-input">
-                    <select id="employeeTypeFilter" class="filter-select">
-                        <option value="all">All Types</option>
-                        <option value="staff">Staff</option>
-                        <option value="guard">Guard</option>
-                    </select>
-                    <button onclick="exportAllEmployees()" class="btn btn-success">
-                        <i class="fas fa-file-export"></i> Export
-                    </button>
-                </div>
+                <!-- Deductions Section -->
+                <div id="deductions-section">
+                    <section class="content-section" id="deductions">
+                        <div class="section-header">
+                            <h2><i class="fas fa-minus-circle"></i> Deduction Management</h2>
+                            <button onclick="showAddDeductionModal()" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Add Deduction
+                            </button>
+                        </div>
 
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Employee ID</th>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Location</th>
-                                <th>Bank</th>
-                                <th>Salary</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="employeeTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
+                        <div class="table-responsive">
+                            <table class="data-table" id="deductionsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Amount</th>
+                                        <th>Reason</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="deductionsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
 
-            <!-- Attendance Section -->
-            <section class="content-section" id="attendance">
-                <div class="section-header">
-                    <h2><i class="fas fa-camera"></i> Attendance Management</h2>
-                    <button onclick="openModal('clockInModal')" class="btn btn-primary">
-                        <i class="fas fa-clock"></i> Clock In/Out
-                    </button>
-                </div>
-
-                <div class="attendance-summary">
-                    <div class="summary-card">
-                        <h4>Present Today</h4>
-                        <p id="presentToday">0</p>
-                    </div>
-                    <div class="summary-card">
-                        <h4>Absent Today</h4>
-                        <p id="absentToday">0</p>
-                    </div>
-                    <div class="summary-card">
-                        <h4>On Leave</h4>
-                        <p id="onLeave">0</p>
-                    </div>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Employee ID</th>
-                                <th>Name</th>
-                                <th>Clock In</th>
-                                <th>Clock Out</th>
-                                <th>Status</th>
-                                <th>Selfies</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendanceTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
-            </div>
-            <!-- End employee-section -->
-
-            <!-- Deductions Section -->
-            <div id="deductions-section">
-            <section class="content-section" id="deductions">
-                <div class="section-header">
-                    <h2><i class="fas fa-minus-circle"></i> Deduction Management</h2>
-                    <button onclick="showAddDeductionModal()" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Add Deduction
-                    </button>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="data-table" id="deductionsTable">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Employee ID</th>
-                                <th>Name</th>
-                                <th>Amount</th>
-                                <th>Reason</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                    <tbody id="deductionsTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
-            <!-- style="display:none; -->
-            <!-- Edit Deduction Modal -->
-                        <div id="editDeductionModal" class="modal">
-                          <div class="modal-content">
+                    <!-- Edit Deduction Modal -->
+                    <div id="editDeductionModal" class="modal">
+                        <div class="modal-content">
                             <h3>Edit Deduction</h3>
                             <form id="editDeductionForm">
-                              <label>Employee</label>
-                              <select id="editDeductionEmployee" required></select>
-                              <label>Amount (₦)</label>
-                              <input type="number" id="editDeductionAmount" min="0" step="1" required />
-                              <label>Reason</label>
-                              <textarea id="editDeductionReason" required></textarea>
-                              <button type="submit" id="editDeductionBtn" class="btn btn-primary">
-                                Update
-                              </button>
-                              <button type="button" onclick="closeModal('editDeductionModal')" class="btn btn-secondary">
-                                Cancel
-                              </button>
+                                <label>Employee</label>
+                                <select id="editDeductionEmployee" required></select>
+                                <label>Amount (₦)</label>
+                                <input type="number" id="editDeductionAmount" min="0" step="1" required />
+                                <label>Reason</label>
+                                <textarea id="editDeductionReason" required></textarea>
+                                <!-- ADDED: Status control for manual management -->
+                                <label>Status</label>
+                                <select id="editDeductionStatus" class="form-control">
+                                    <option value="pending">Pending</option>
+                                    <option value="applied">Applied</option>
+                                    <option value="cancelled">Cancelled</option>
+                                </select>
+                                <button type="submit" id="editDeductionBtn" class="btn btn-primary">Update</button>
+                                <button type="button" onclick="closeModal('editDeductionModal')" class="btn btn-secondary">Cancel</button>
                             </form>
-                          </div>
                         </div>
-            <!-- Payments Section -->
-            <!-- <section class="content-section" id="payments"> -->
-                <section class="content-section" id="payments">
-                <div class="section-header">
-                    <h2><i class="fas fa-money-bill-wave"></i> Payment Processing</h2>
-                    <div class="btn-group">
-                        <button onclick="showIndividualPaymentModal()" class="btn btn-primary">
-                            <i class="fas fa-user"></i> Individual Payment
+                    </div>
+
+                    <!-- Payments Section -->
+                    <section class="content-section" id="payments">
+                        <div class="section-header">
+                            <h2><i class="fas fa-money-bill-wave"></i> Payment Processing</h2>
+                            <div class="btn-group">
+                                <button onclick="showIndividualPaymentModal()" class="btn btn-primary">
+                                    <i class="fas fa-user"></i> Individual Payment
+                                </button>
+                                <button onclick="showBulkPaymentModal()" class="btn btn-success">
+                                    <i class="fas fa-users"></i> Bulk Payment
+                                </button>
+                                <button onclick="exportPaymentHistory()" class="btn btn-info">
+                                    <i class="fas fa-download"></i> Export History
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="payment-summary">
+                            <div class="summary-card">
+                                <h4>Pending Payments</h4>
+                                <p id="pendingPayments">0</p>
+                            </div>
+                            <div class="summary-card">
+                                <h4>This Month</h4>
+                                <p id="monthlyPayments">₦0</p>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th><input type="checkbox" id="selectAllPayments" onchange="toggleAllPayments()"></th>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Bank Account</th>
+                                        <th>Base Salary</th>
+                                        <th>Deductions</th>
+                                        <th>Net Salary</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="paymentsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- Payslips Section -->
+                    <section class="content-section" id="payslips">
+                        <div class="section-header">
+                            <h2><i class="fas fa-file-invoice"></i> Payslip Generation</h2>
+                        </div>
+
+                        <div class="payslip-generator">
+                            <div class="form-group">
+                                <label for="payslipEmployee">Select Employee</label>
+                                <select id="payslipEmployee" class="form-control"></select>
+                            </div>
+                            <div class="form-group">
+                                <label for="payslipMonth">Select Month</label>
+                                <input type="month" id="payslipMonth" class="form-control">
+                            </div>
+                            <div class="btn-group">
+                                <button onclick="generatePayslip()" class="btn btn-primary">
+                                    <i class="fas fa-file-pdf"></i> Generate Payslip
+                                </button>
+                                <button onclick="printPayslip()" class="btn btn-secondary">
+                                    <i class="fas fa-print"></i> Print
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="payslipPreview" class="payslip-preview"></div>
+                    </section>
+                </div>
+
+                <!-- Companies Section -->
+                <div id="admin-controls-companies">
+                    <section class="content-section" id="companies">
+                        <div class="section-header">
+                            <h2><i class="fas fa-building"></i> Companies/Clients Management</h2>
+                            <button onclick="openModal('addCompanyModal')" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Add Company
+                            </button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Company Name</th>
+                                        <th>Location</th>
+                                        <th>Guards Assigned</th>
+                                        <th>Amount Paid to Us</th>
+                                        <th>Amount Paid to Guards</th>
+                                        <th>Profit</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="companiesTableBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- Create Accounts Section -->
+                    <section class="content-section" id="accounts">
+                        <div class="section-header">
+                            <h2><i class="fas fa-user-plus"></i> Create Employee Accounts</h2>
+                        </div>
+
+                        <div class="account-creation-form">
+                            <form id="createAccountForm">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="accountType">Employee Type</label>
+                                        <select id="accountType" class="form-control" required>
+                                            <option value="">Select Type</option>
+                                            <option value="staff">Staff</option>
+                                            <option value="guard">Guard</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="accountName">Full Name</label>
+                                        <input type="text" id="accountName" class="form-control" required>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="accountUsername">Username</label>
+                                        <input type="text" id="accountUsername" name="username" class="form-control" required autocomplete="username">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="accountPassword">Password</label>
+                                        <input type="password" id="accountPassword" class="form-control" required autocomplete="new-password">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="accountLocation">Department/Location</label>
+                                        <input type="text" id="accountLocation" class="form-control" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="accountSalary">Monthly Salary (₦)</label>
+                                        <input type="number" id="accountSalary" class="form-control" required>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="accountPhone">Phone Number</label>
+                                        <input type="tel" id="accountPhone" class="form-control">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="accountEmail">Email</label>
+                                        <input type="email" id="accountEmail" class="form-control">
+                                    </div>
+                                </div>
+                                <h3>Bank Account Details (Nigerian Banks - Naira)</h3>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="accountBankName">Bank Name</label>
+                                        <select id="accountBankName" class="form-control" required>
+                                            <option value="">Select Bank</option>
+                                            <!-- Banks loaded dynamically from Paystack -->
+                                        </select>
+                                        <small class="text-muted">Select bank to enable auto-verification</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="accountNumber">Account Number</label>
+                                        <div style="display: flex; gap: 10px;">
+                                            <input type="text" id="accountNumber" class="form-control" maxlength="10" required 
+                                                placeholder="Enter 10-digit number" style="flex: 1;">
+                                            <button type="button" id="verifyAccountBtn" class="btn btn-secondary" 
+                                                    style="white-space: nowrap;">
+                                                <i class="fas fa-check-circle"></i> Verify
+                                            </button>
+                                        </div>
+                                        <small id="verificationStatus" class="text-muted">Enter account number and leave field to auto-verify</small>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="accountHolderName">Account Holder Name</label>
+                                    <input type="text" id="accountHolderName" class="form-control" required 
+                                        placeholder="Auto-filled after verification" readonly style="background: #f8f9fa;">
+                                    <small class="text-muted">This will be auto-filled when account is verified</small>
+                                </div>
+                                <!-- FIXED: Better Employee ID Display -->
+                                <div class="generated-id-display">
+                                    <p style="margin: 0; font-size: 16px;">Generated Employee ID: <strong id="generatedEmployeeId" style="color: #007bff; font-size: 18px;">-</strong></p>
+                                    <!-- <small class="text-muted"></small> -->
+                                </div>
+
+                                <button type="submit" id="createAccountBtn" class="btn btn-primary btn-block">
+                                    <i class="fas fa-user-plus"></i> Create Account
+                                </button>
+                            </form>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Payment History Section -->
+                <div id="history-section">
+                    <section class="content-section" id="history">
+                        <div class="section-header">
+                            <h2><i class="fas fa-history"></i> Payment History</h2>
+                            <button onclick="exportPaymentHistory()" class="btn btn-success">
+                                <i class="fas fa-file-export"></i> Export
+                            </button>
+                        </div>
+
+                        <div class="filter-bar">
+                            <input type="text" id="historySearch" placeholder="Search by employee..." class="search-input">
+                            <input type="date" id="historyDateFrom" class="form-control">
+                            <input type="date" id="historyDateTo" class="form-control">
+                            <button onclick="filterHistory()" class="btn btn-secondary">Filter</button>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Bank Account</th>
+                                        <th>Amount</th>
+                                        <th>Method</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Sacked Employees Section -->
+                <div id="admin-controls-sacked">
+                    <section class="content-section" id="sacked">
+                        <div class="section-header">
+                            <h2><i class="fas fa-user-slash"></i> Sacked/Resigned Employees Archive</h2>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Type</th>
+                                        <th>Date Sacked</th>
+                                        <th>Offense/Reason</th>
+                                        <th>Terminated By</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sackedTableBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Notifications Section -->
+                <section class="content-section" id="notifications">
+                    <div class="section-header">
+                        <h2><i class="fas fa-bell"></i> Notifications</h2>
+                        <button onclick="clearAllNotifications()" class="btn btn-secondary">
+                            <i class="fas fa-trash"></i> Clear All
                         </button>
-                        <button onclick="showBulkPaymentModal()" class="btn btn-success">
-                            <i class="fas fa-users"></i> Bulk Payment
+                    </div>
+                    <div id="notificationsList" class="notifications-list"></div>
+                </section>
+            </main>
+        </div>
+
+        <!-- MODALS -->
+
+        <!-- Add Employee Modal -->
+        <div id="addEmployeeModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Add New Employee</h3>
+                    <span class="close" onclick="closeModal('addEmployeeModal')">&times;</span>
+                </div>
+                <form id="addEmployeeForm" onsubmit="handleCreateEmployee(event)">
+                    <div class="form-group">
+                        <label for="newEmployeeType">Employee Type</label>
+                        <select id="newEmployeeType" class="form-control" required>
+                            <option value="staff">Staff</option>
+                            <option value="guard">Guard</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="newEmployeeName">Full Name</label>
+                        <input type="text" id="newEmployeeName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newEmployeeEmail">Email</label>
+                        <input type="email" id="newEmployeeEmail" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newEmployeePhone">Phone</label>
+                        <input type="text" id="newEmployeePhone" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newEmployeeLocation">Location</label>
+                        <input type="text" id="newEmployeeLocation" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newEmployeeSalary">Monthly Salary (₦)</label>
+                        <input type="number" id="newEmployeeSalary" class="form-control" required>
+                    </div>
+                    <h4>Bank Details</h4>
+                    <div class="form-group">
+                        <label for="newEmployeeBankName">Bank Name</label>
+                        <select id="newEmployeeBankName" class="form-control" required>
+                            <option value="">Select Bank</option>
+                            <option value="Access Bank">Access Bank</option>
+                            <option value="GTBank">GTBank</option>
+                            <option value="First Bank">First Bank</option>
+                            <option value="UBA">UBA</option>
+                            <option value="Zenith Bank">Zenith Bank</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="newEmployeeAccountNumber">Account Number</label>
+                        <input type="text" id="newEmployeeAccountNumber" class="form-control" maxlength="10" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newEmployeeAccountHolder">Account Holder Name</label>
+                        <input type="text" id="newEmployeeAccountHolder" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" id="createEmployeeBtn">
+                        Add Employee
+                        <span id="addEmployeeSpinner" class="spinner hidden"></span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Clock In/Out Modal -->
+        <div id="clockInModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Clock In/Out with Selfie</h3>
+                    <span class="close" onclick="closeModal('clockInModal')">&times;</span>
+                </div>
+                <form id="clockInForm">
+                    <div class="form-group">
+                        <label for="clockEmployee">Select Employee</label>
+                        <select id="clockEmployee" class="form-control" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="clockAction">Action</label>
+                        <select id="clockAction" class="form-control" required>
+                            <option value="in">Clock In</option>
+                            <option value="out">Clock Out</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="markWithoutSelfie"> Mark as Present without Selfie
+                        </label>
+                    </div>
+                    <div class="camera-section" id="cameraSection">
+                        <video id="cameraVideo" autoplay muted playsinline></video>
+                        <canvas id="cameraCanvas" style="display:none;"></canvas>
+                        <div id="capturedImage"></div>
+                    </div>
+                    <div class="btn-group" id="cameraButtons">
+                        <button type="button" onclick="startCamera()" class="btn btn-primary">
+                            <i class="fas fa-camera"></i> Start Camera
+                        </button>
+                        <button type="button" onclick="capturePhoto()" class="btn btn-success" id="captureBtn" disabled>
+                            <i class="fas fa-camera"></i> Capture Selfie
                         </button>
                     </div>
-                </div>
+                    <button type="submit" class="btn btn-primary btn-block" id="submitClockBtn">
+                        Submit Attendance
+                    </button>
+                </form>
+            </div>
+        </div>
 
-                <div class="payment-summary">
-                    <div class="summary-card">
-                        <h4>Pending Payments</h4>
-                        <p id="pendingPayments">0</p>
-                    </div>
-                    <div class="summary-card">
-                        <h4>This Month</h4>
-                        <p id="monthlyPayments">₦0</p>
-                    </div>
+        <!-- ADDED: On Leave Modal -->
+        <div id="leaveModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Mark Employee On Leave</h3>
+                    <span class="close" onclick="closeModal('leaveModal')">&times;</span>
                 </div>
-
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Employee ID</th>
-                                <th>Name</th>
-                                <th>Bank Account</th>
-                                <th>Base Salary</th>
-                                <th>Deductions</th>
-                                <th>Net Salary</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="paymentsTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- Payslips Section -->
-            <section class="content-section" id="payslips">
-                <div class="section-header">
-                    <h2><i class="fas fa-file-invoice"></i> Payslip Generation</h2>
-                </div>
-
-                <div class="payslip-generator">
+                <form id="leaveForm">
                     <div class="form-group">
-                        <label for="payslipEmployee">Select Employee</label>
-                        <select id="payslipEmployee" class="form-control"></select>
+                        <label for="leaveEmployee">Select Employee</label>
+                        <select id="leaveEmployee" class="form-control" required></select>
                     </div>
                     <div class="form-group">
-                        <label for="payslipMonth">Select Month</label>
-                        <input type="month" id="payslipMonth" class="form-control">
-                    </div>
-                    <button onclick="generatePayslip()" class="btn btn-primary">
-                        <i class="fas fa-file-pdf"></i> Generate Payslip
-                    </button>
-                </div>
-
-                <div id="payslipPreview" class="payslip-preview"></div>
-            </section>
-            </div>
-            <!-- End payment-section -->
-
-            <!-- Companies Section -->
-            <div id="admin-controls-companies">
-            <section class="content-section" id="companies">
-                <div class="section-header">
-                    <h2><i class="fas fa-building"></i> Companies/Clients Management</h2>
-                    <!-- <button onclick="showAddCompanyModal()" class="btn btn-primary"> -->
-                    <button onclick="openModal('addCompanyModal')"class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Add Company
-                    </button>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Company Name</th>
-                                <th>Location</th>
-                                <th>Guards Assigned</th>
-                                <th>Amount Paid to Us</th>
-                                <th>Amount Paid to Guards</th>
-                                <th>Profit</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="companiesTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- Create Accounts Section -->
-            <section class="content-section" id="accounts">
-                <div class="section-header">
-                    <h2><i class="fas fa-user-plus"></i> Create Employee Accounts</h2>
-                </div>
-
-                <div class="account-creation-form">
-                    <form id="createAccountForm" onsubmit="return false;">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="accountType">Employee Type</label>
-                                <select id="accountType" class="form-control" required>
-                                    <option value="">Select Type</option>
-                                    <option value="staff">Staff</option>
-                                    <option value="guard">Guard</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="accountName">Full Name</label>
-                                <input type="text" id="accountName" class="form-control" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="accountUsername">Username</label>
-                                <input type="text" id="accountUsername" name="username" class="form-control" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="accountPassword">Password</label>
-                                <input type="password" id="accountPassword" class="form-control" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="accountLocation">Department/Location</label>
-                                <input type="text" id="accountLocation" class="form-control" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="accountSalary">Monthly Salary (₦)</label>
-                                <input type="number" id="accountSalary" class="form-control" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="accountPhone">Phone Number</label>
-                                <input type="tel" id="accountPhone" class="form-control">
-                            </div>
-                            <div class="form-group">
-                                <label for="accountEmail">Email</label>
-                                <input type="email" id="accountEmail" class="form-control">
-                            </div>
-                        </div>
-
-                        <h3>Bank Account Details (Nigerian Banks - Naira)</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="accountBankName">Bank Name</label>
-                                <select id="accountBankName" class="form-control" required>
-                                    <option value="">Select Bank</option>
-                                    <option value="Access Bank">Access Bank</option>
-                                    <option value="GTBank">GTBank</option>
-                                    <option value="First Bank">First Bank</option>
-                                    <option value="UBA">UBA</option>
-                                    <option value="Zenith Bank">Zenith Bank</option>
-                                    <option value="Fidelity Bank">Fidelity Bank</option>
-                                    <option value="Union Bank">Union Bank</option>
-                                    <option value="Sterling Bank">Sterling Bank</option>
-                                    <option value="Stanbic IBTC">Stanbic IBTC</option>
-                                    <option value="Polaris Bank">Polaris Bank</option>
-                                    <option value="Wema Bank">Wema Bank</option>
-                                    <option value="Ecobank">Ecobank</option>
-                                    <option value="FCMB">FCMB</option>
-                                    <option value="Keystone Bank">Keystone Bank</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="accountNumber">Account Number</label>
-                                <input type="text" id="accountNumber" class="form-control" maxlength="10" required>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="accountHolderName">Account Holder Name</label>
-                            <input type="text" id="accountHolderName" class="form-control" required>
-                        </div>
-
-                        <div class="generated-id-display">
-                            <p>Generated Employee ID: <strong id="generatedEmployeeId">-</strong></p>
-                        </div>
-
-                        <button type="button" onclick="createAccount(event)" id="createAccountBtn" class="btn btn-primary btn-block">
-                            <i class="fas fa-user-plus"></i> Create Account
-                        </button>
-                    </form>
-                </div>
-            </section>
-            </div>
-            <!-- End admin-controls -->
-
-            <!-- Payment History Section -->
-            <div id="history-section">
-            <section class="content-section" id="history">
-                <div class="section-header">
-                    <h2><i class="fas fa-history"></i> Payment History</h2>
-                    <button onclick="exportPaymentHistory()" class="btn btn-success">
-                        <i class="fas fa-file-export"></i> Export
-                    </button>
-                </div>
-
-                <div class="filter-bar">
-                    <input type="text" id="historySearch" placeholder="Search by employee..." class="search-input">
-                    <input type="date" id="historyDateFrom" class="form-control">
-                    <input type="date" id="historyDateTo" class="form-control">
-                    <button onclick="filterHistory()" class="btn btn-secondary">Filter</button>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Employee ID</th>
-                                <th>Name</th>
-                                <th>Bank Account</th>
-                                <th>Amount</th>
-                                <th>Method</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="historyTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
-            </div>
-            <!-- End payment-section -->
-
-            <!-- Sacked Employees Section -->
-            <div id="admin-controls-sacked">
-            <section class="content-section" id="sacked">
-                <div class="section-header">
-                    <h2><i class="fas fa-user-slash"></i> Sacked/Resigned Employees Archive</h2>
-                </div>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Employee ID</th>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Date Sacked</th>
-                                <th>Offense/Reason</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="sackedTableBody"></tbody>
-                    </table>
-                </div>
-            </section>
-            </div>
-            <!-- End admin-controls -->
-
-            <!-- Notifications Section -->
-            <section class="content-section" id="notifications">
-                <div class="section-header">
-                    <h2><i class="fas fa-bell"></i> Notifications</h2>
-                    <button onclick="clearAllNotifications()" class="btn btn-secondary">
-                        <i class="fas fa-trash"></i> Clear All
-                    </button>
-                </div>
-
-                <div id="notificationsList" class="notifications-list"></div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Modals -->
-    <!-- Add Employee Modal -->
-    <div id="addEmployeeModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add New Employee</h3>
-                <span class="close" onclick="closeModal('addEmployeeModal')">&times;</span>
-            </div>
-            <form id="addEmployeeForm" onsubmit="handleCreateEmployee(event)">
-                <div class="form-group">
-                    <label for="newEmployeeType">Employee Type</label>
-                    <select id="newEmployeeType" class="form-control" required>
-                        <option value="staff">Staff</option>
-                        <option value="guard">Guard</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for ="newEmployeeName">Full Name</label>
-                    <input type="text" id="newEmployeeName" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for ="newEmployeeEmail">Email</label>
-                    <input type="email" id="newEmployeeEmail" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for ="newEmployeePhone">Phone</label>
-                    <input type="text" id="newEmployeePhone" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="newEmployeeLocation">Location</label>
-                    <input type="text" id="newEmployeeLocation" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="newEmployeeSalary">Monthly Salary (₦)</label>
-                    <input type="number" id="newEmployeeSalary" class="form-control" required>
-                </div>
-                <h4>Bank Details</h4>
-                <div class="form-group">
-                    <label for="newEmployeeBankName">Bank Name</label>
-                    <select id="newEmployeeBankName" class="form-control" required>
-                        <option value="">Select Bank</option>
-                        <option value="Access Bank">Access Bank</option>
-                        <option value="GTBank">GTBank</option>
-                        <option value="First Bank">First Bank</option>
-                        <option value="UBA">UBA</option>
-                        <option value="Zenith Bank">Zenith Bank</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="newEmployeeAccountNumber">Account Number</label>
-                    <input type="text" id="newEmployeeAccountNumber" class="form-control" maxlength="10" required>
-                </div>
-                <div class="form-group">
-                    <label for="newEmployeeAccountHolder">Account Holder Name</label>
-                    <input type="text" id="newEmployeeAccountHolder" class="form-control" required>
-                </div>
-                <button type="submit" class="btn btn-primary btn-block" id="createEmployeeBtn">
-                    Add Employee
-                    <span id="addEmployeeSpinner" class="spinner hidden"></span>
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Clock In/Out Modal -->
-    <div id="clockInModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Clock In/Out with Selfie</h3>
-                <span class="close" onclick="closeModal('clockInModal')">&times;</span>
-            </div>
-            <form id="clockInForm">
-                <div class="form-group">
-                    <label for="clockEmployee">Select Employee</label>
-                    <select id="clockEmployee" class="form-control" required></select>
-                </div>
-                <div class="form-group">
-                    <label for="clockAction">Action</label>
-                    <select id="clockAction" class="form-control" required>
-                        <option value="in">Clock In</option>
-                        <option value="out">Clock Out</option>
-                    </select>
-                </div>
-                <div class="camera-section">
-                    <video id="cameraVideo" autoplay muted playsinline></video>
-                    <canvas id="cameraCanvas" style="display:none;"></canvas>
-                    <div id="capturedImage"></div>
-                </div>
-                <div class="btn-group">
-                    <button type="button" onclick="startCamera()" class="btn btn-primary">
-                        <i class="fas fa-camera"></i> Start Camera
-                    </button>
-                    <button type="button" onclick="capturePhoto()" class="btn btn-success" id="captureBtn" disabled>
-                        <i class="fas fa-camera"></i> Capture Selfie
-                    </button>
-                </div>
-                <button type="submit" class="btn btn-primary btn-block" id="submitClockBtn" disabled>
-                    Submit Attendance
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Add Deduction Modal -->
-    <div id="addDeductionModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add Deduction</h3>
-                <span class="close" onclick="closeModal('addDeductionModal')">&times;</span>
-            </div>
-            <form id="addDeductionForm">
-                <div class="form-group">
-                    <label for="deductionEmployee">Select Employee</label>
-                    <select id="deductionEmployee" class="form-control" required></select>
-                </div>
-                <div class="form-group">
-                    <label for="deductionAmount">Deduction Amount (₦)</label>
-                    <input type="number" id="deductionAmount" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="deductionReason">Reason for Deduction</label>
-                    <textarea id="deductionReason" class="form-control" rows="4" required></textarea>
-                </div>
-                <button type="submit" id="addDeductionBtn" class="btn btn-primary btn-block">Add Deduction</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Individual Payment Modal -->
-    <div id="individualPaymentModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Individual Payment</h3>
-                <span class="close" onclick="closeModal('individualPaymentModal')">&times;</span>
-            </div>
-            <form id="individualPaymentForm">
-                <div class="form-group">
-                    <label for="paymentEmployee">Select Employee</label>
-                    <select id="paymentEmployee" class="form-control" required></select>
-                </div>
-                <div class="payment-details" id="individualPaymentDetails"></div>
-                <h4>Card Payment (Nigerian/International Cards Accepted)</h4>
-                <div class="form-group">
-                    <label for="cardNumber">Card Number</label>
-                    <input type="text" id="cardNumber" class="form-control" placeholder="1234 5678 9012 3456" required>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="cardExpiry">Expiry Date</label>
-                        <input type="text" id="cardExpiry" class="form-control" placeholder="MM/YY" required>
+                        <label for="leaveStartDate">Start Date</label>
+                        <input type="date" id="leaveStartDate" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label for="cardCVV">CVV</label>
-                        <input type="text" id="cardCVV" class="form-control" placeholder="123" required>
+                        <label for="leaveEndDate">End Date</label>
+                        <input type="date" id="leaveEndDate" class="form-control" required>
                     </div>
-                </div>
-                <button type="submit" class="btn btn-primary btn-block">Proceed to Payment</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- OTP Verification Modal -->
-    <div id="otpModal" class="modal">
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h3>OTP Verification</h3>
-            </div>
-            <div class="otp-content">
-                <p>Enter the 6-digit OTP sent to your email</p>
-                <input type="text" id="otpInput" class="form-control otp-input" maxlength="6" placeholder="000000">
-                <p class="otp-timer">OTP expires in: <span id="otpTimer">30</span>s</p>
-                <button onclick="verifyOTP()" class="btn btn-primary btn-block">Verify & Complete Payment</button>
-                <button onclick="resendOTP()" id="resendOtpBtn" class="btn btn-link btn-block" disabled>Resend OTP</button>
-                <button onclick="closeModal('otpModal')" class="btn btn-secondary btn-block">Cancel</button>
+                    <div class="form-group">
+                        <label for="leaveReason">Reason</label>
+                        <textarea id="leaveReason" class="form-control" rows="3" placeholder="Optional reason for leave"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning btn-block">
+                        <i class="fas fa-umbrella-beach"></i> Mark On Leave
+                    </button>
+                </form>
             </div>
         </div>
-    </div>
 
-    <!-- Bulk Payment Modal -->
-    <div id="bulkPaymentModal" class="modal">
-        <div class="modal-content modal-lg">
-            <div class="modal-header">
-                <h3>Bulk Payment Processing</h3>
-                <span class="close" onclick="closeModal('bulkPaymentModal')">&times;</span>
-            </div>
-            <div class="bulk-payment-content">
-                <div class="bulk-summary">
-                    <h4>Payment Summary</h4>
-                    <p>Total Employees: <strong id="bulkTotalEmployees">0</strong></p>
-                    <p>Total Amount: <strong id="bulkTotalAmount">₦0</strong></p>
+        <!-- Add Deduction Modal -->
+        <div id="addDeductionModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Add Deduction</h3>
+                    <span class="close" onclick="closeModal('addDeductionModal')">&times;</span>
                 </div>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th><input type="checkbox" id="selectAllBulk" onchange="toggleAllBulkPayments()"></th>
-                                <th>Employee ID</th>
-                                <th>Name</th>
-                                <th>Bank Account</th>
-                                <th>Net Salary</th>
-                            </tr>
-                        </thead>
-                        <tbody id="bulkPaymentTableBody"></tbody>
-                    </table>
-                </div>
-                <h4>Card Payment</h4>
-                <div class="form-group">
-                    <label for="bulkCardNumber">Card Number</label>
-                    <input type="text" id="bulkCardNumber" class="form-control" placeholder="1234 5678 9012 3456" required>
-                </div>
-                <button onclick="processBulkPayment()" class="btn btn-primary btn-block">Process Bulk Payment</button>
+                <form id="addDeductionForm">
+                    <div class="form-group">
+                        <label for="deductionEmployee">Select Employee</label>
+                        <select id="deductionEmployee" class="form-control" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="deductionAmount">Deduction Amount (₦)</label>
+                        <input type="number" id="deductionAmount" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="deductionReason">Reason for Deduction</label>
+                        <textarea id="deductionReason" class="form-control" rows="4" required></textarea>
+                    </div>
+                    <button type="submit" id="addDeductionBtn" class="btn btn-primary btn-block">Add Deduction</button>
+                </form>
             </div>
         </div>
-    </div>
 
-    <!-- Add Company Modal -->
-    <div id="addCompanyModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add Company/Client</h3>
-                <span class="close" onclick="closeModal('addCompanyModal')">&times;</span>
-            </div>
-            <form id="addCompanyForm">
-                <div class="form-group">
-                    <label for="companyName">Company Name</label>
-                    <input type="text" id="companyName" class="form-control" required>
+        <!-- FIXED: Individual Payment Modal - Removed card fields, added Paystack flow -->
+        <div id="individualPaymentModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Individual Payment</h3>
+                    <span class="close" onclick="closeModal('individualPaymentModal')">&times;</span>
                 </div>
-                <div class="form-group">
-                    <label for="companyLocation">Location/Address</label>
-                    <input type="text" id="companyLocation" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="companyGuardsCount">Number of Guards Needed</label>
-                    <input type="number" id="companyGuardsCount" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="companyPaymentToUs">Amount Company Pays Us (₦)</label>
-                    <input type="number" id="companyPaymentToUs" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="companyPaymentPerGuard">Amount We Pay Per Guard (₦)</label>
-                    <input type="number" id="companyPaymentPerGuard" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="companyAssignedGuards">Assign Guards (Select multiple)</label>
-                    <select id="companyAssignedGuards" class="form-control" multiple></select>
-                </div>
-                <button type="submit" class="btn btn-primary btn-block">Add Company</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Sack Employee Modal -->
-    <div id="sackEmployeeModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Sack/Resign Employee</h3>
-                <span class="close" onclick="closeModal('sackEmployeeModal')">&times;</span>
-            </div>
-            <form id="sackEmployeeForm">
-                <input type="hidden" id="sackEmployeeId">
-                <div class="form-group">
-                    <label for="sackEmployeeName">Employee Name</label>
-                    <input type="text" id="sackEmployeeName" class="form-control" readonly>
-                </div>
-                <div class="form-group">
-                    <label for="sackDate">Date Sacked</label>
-                    <input type="date" id="sackDate" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label for="sackReason">Offense/Reason for Termination</label>
-                    <textarea id="sackReason" class="form-control" rows="4" required></textarea>
-                </div>
-                <button type="submit" class="btn btn-danger btn-block">Confirm Termination</button>
-            </form>
-        </div> 
-    </div>
-
-    <!-- Export Password Modal -->
-    <div id="exportPasswordModal" class="modal">
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h3>Enter Password to Export</h3>
-            </div>
-            <div class="otp-content">
-                <p id="exportPasswordPrompt">Enter password to export data</p>
-                <input type="password" id="exportPassword" class="form-control" placeholder="Enter password">
-                <button onclick="confirmExport()" class="btn btn-primary btn-block">Confirm Export</button>
-                <button onclick="closeModal('exportPasswordModal')" class="btn btn-secondary btn-block">Cancel</button>
+                <form id="individualPaymentForm">
+                    <div class="form-group">
+                        <label for="paymentEmployee">Select Employee</label>
+                        <select id="paymentEmployee" class="form-control" required onchange="updatePaymentPreview()"></select>
+                    </div>
+                    
+                    <!-- ADDED: Payment Preview -->
+                    <div id="paymentPreview" class="payment-preview" style="display: none;">
+                        <div class="payment-preview-row">
+                            <span>Base Salary:</span>
+                            <span id="previewBaseSalary">₦0</span>
+                        </div>
+                        <div class="payment-preview-row">
+                            <span>Deductions:</span>
+                            <span id="previewDeductions">₦0</span>
+                        </div>
+                        <div class="payment-preview-row payment-preview-total">
+                            <span>Net Amount:</span>
+                            <span id="previewNetAmount">₦0</span>
+                        </div>
+                        <div class="payment-preview-row" style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                            <span>Bank:</span>
+                            <span id="previewBank">-</span>
+                        </div>
+                        <div class="payment-preview-row" style="font-size: 0.9em; color: #666;">
+                            <span>Account:</span>
+                            <span id="previewAccount">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info" style="margin: 15px 0; padding: 10px; background: #d1ecf1; border-radius: 4px;">
+                        <i class="fas fa-info-circle"></i> You will be redirected to Paystack to complete the payment securely.
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-credit-card"></i> Proceed to Paystack Payment
+                    </button>
+                </form>
             </div>
         </div>
-    </div>
-     <!-- <footer class="footer">
-            <p>&copy; 2026 Fotasco security services. All rights reserved. | Privacy Policy | Terms of Service</p>
-    </footer> -->
-    
-    <!-- Toast Notification Container -->
-    <div id="toastContainer" class="toast-container"></div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="{% static 'script.js' %}"></script>
-</body>
+
+        <!-- OTP Verification Modal -->
+        <div id="otpModal" class="modal">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h3>OTP Verification</h3>
+                </div>
+                <div class="otp-content">
+                    <p>Enter the 6-digit OTP sent to your email</p>
+                    <input type="text" id="otpInput" class="form-control otp-input" maxlength="6" placeholder="000000">
+                    <p class="otp-timer">OTP expires in: <span id="otpTimer">30</span>s</p>
+                    <button onclick="verifyOTP()" class="btn btn-primary btn-block">Verify & Complete Payment</button>
+                    <button onclick="resendOTP()" id="resendOtpBtn" class="btn btn-link btn-block" disabled>Resend OTP</button>
+                    <button onclick="closeModal('otpModal')" class="btn btn-secondary btn-block">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- FIXED: Bulk Payment Modal - Proper columns and dynamic total -->
+        <div id="bulkPaymentModal" class="modal">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h3>Bulk Payment Processing</h3>
+                    <span class="close" onclick="closeModal('bulkPaymentModal')">&times;</span>
+                </div>
+                <div class="bulk-payment-content">
+                    <div class="bulk-summary">
+                        <h4>Payment Summary</h4>
+                        <p>Total Employees: <strong id="bulkTotalEmployees">0</strong></p>
+                        <!-- ADDED: Dynamic total display -->
+                        <div class="dynamic-total">
+                            Total Amount: <span id="bulkTotalAmount">₦0</span>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="selectAllBulk" onchange="toggleAllBulkPayments()"></th>
+                                    <th>Employee ID</th>
+                                    <th>Name</th>
+                                    <th>Bank Account</th>
+                                    <th>Net Salary</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bulkPaymentTableBody"></tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="alert alert-info" style="margin: 15px 0; padding: 10px; background: #d1ecf1; border-radius: 4px;">
+                        <i class="fas fa-info-circle"></i> Selected employees will be paid via Paystack. Ensure sufficient balance.
+                    </div>
+                    
+                    <button onclick="processBulkPayment()" class="btn btn-primary btn-block">
+                        <i class="fas fa-credit-card"></i> Process Bulk Payment via Paystack
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Company Modal -->
+        <div id="addCompanyModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Add Company/Client</h3>
+                    <span class="close" onclick="closeModal('addCompanyModal')">&times;</span>
+                </div>
+                <form id="addCompanyForm">
+                    <div class="form-group">
+                        <label for="companyName">Company Name</label>
+                        <input type="text" id="companyName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="companyLocation">Location/Address</label>
+                        <input type="text" id="companyLocation" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="companyGuardsCount">Number of Guards Needed</label>
+                        <input type="number" id="companyGuardsCount" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="companyPaymentToUs">Amount Company Pays Us (₦)</label>
+                        <input type="number" id="companyPaymentToUs" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="companyPaymentPerGuard">Amount We Pay Per Guard (₦)</label>
+                        <input type="number" id="companyPaymentPerGuard" class="form-control" required>
+                    </div>
+                    <!-- FIXED: Manual guard assignment with checkboxes -->
+                    <div class="form-group">
+                        <label>Assign Guards (Check to assign)</label>
+                        <div id="companyAssignedGuardsContainer" class="guard-selection-container">
+                            <p class="text-muted">Click \"Add Company\" button to load available guards</p>
+                        </div>
+                        <select id="companyAssignedGuards" name="assigned_guards" multiple style="display:none;"></select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Add Company</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Sack Employee Modal -->
+        <div id="sackEmployeeModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Sack/Resign Employee</h3>
+                    <span class="close" onclick="closeModal('sackEmployeeModal')">&times;</span>
+                </div>
+                <form id="sackEmployeeForm">
+                    <input type="hidden" id="sackEmployeeId">
+                    <div class="form-group">
+                        <label for="sackEmployeeName">Employee Name</label>
+                        <input type="text" id="sackEmployeeName" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="sackDate">Date Sacked</label>
+                        <input type="date" id="sackDate" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="sackReason">Offense/Reason for Termination</label>
+                        <textarea id="sackReason" class="form-control" rows="4" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-block">Confirm Termination</button>
+                </form>
+            </div> 
+        </div>
+
+        <!-- Export Password Modal -->
+        <div id="exportPasswordModal" class="modal">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h3>Enter Password to Export</h3>
+                </div>
+                <form class="otp-content" onsubmit="event.preventDefault(); confirmExport();">
+                    <p id="exportPasswordPrompt">Enter password to export data</p>
+                    <input type="password" id="exportPassword" class="form-control" placeholder="Enter password" autocomplete="current-password" required>
+                    <button type="submit" class="btn btn-primary btn-block">Confirm Export</button>
+                    <button type="button" onclick="closeModal('exportPasswordModal')" class="btn btn-secondary btn-block">Cancel</button>
+                </form>
+            </div>
+        </div>
+                <!-- Employee Detail Modal -->
+        <div id="employeeDetailModal" class="modal">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h3>Employee Details</h3>
+                    <span class="close" onclick="closeModal('employeeDetailModal')">&times;</span>
+                </div>
+                <div id="employeeDetailContent" class="modal-body">
+                    <!-- Content populated dynamically -->
+                </div>
+                <div class="modal-footer">
+                    <button onclick="closeModal('employeeDetailModal')" class="btn btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Global Loading Spinner -->
+        <div id="globalSpinner" class="spinner-overlay hidden">
+            <div class="spinner"></div>
+        </div>
+        
+        <!-- Toast Notification Container -->
+        <div id="toastContainer" class="toast-container"></div>
+        
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+        <script src="{% static 'script.js' %}"></script>
+    </body>
 </html>

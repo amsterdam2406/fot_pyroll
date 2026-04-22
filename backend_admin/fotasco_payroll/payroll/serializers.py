@@ -66,16 +66,18 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(),
-        required=False,
-        allow_null=True,
-    )
+    # REMOVED: user field that was causing serialization issues
+    # The user relationship is handled internally, not exposed in API
 
     class Meta:
         model = Employee
-        fields = '__all__'
-        read_only_fields = ['employee_id', 'created_at', 'updated_at']
+        fields = [
+            'id', 'employee_id', 'name', 'type', 'location', 
+            'salary', 'phone', 'email', 'bank_name', 'account_number',
+            'account_holder', 'status', 'join_date', 'id_sequence', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['employee_id', 'id_sequence', 'created_at', 'updated_at', 'id']
+    
     def validate_name(self, value):
         if not value or not value.strip():
             raise serializers.ValidationError("Employee name cannot be empty")
@@ -84,6 +86,34 @@ class EmployeeSerializer(serializers.ModelSerializer):
     def validate_salary(self, value):
         if value < 0:
             raise serializers.ValidationError("Salary cannot be negative")
+        return value
+        
+    def validate_account_number(self, value):
+        if not value:
+            return value
+        if len(value) != 10:
+            raise serializers.ValidationError("Account number must be exactly 10 digits")
+        if not value.isdigit():
+            raise serializers.ValidationError("Account number must contain only digits")
+        
+        # Check for duplicates excluding current instance (for updates)
+        queryset = Employee.objects.filter(account_number=value, status__in=['active', 'terminated'])
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("This account number is already registered")
+        
+        return value
+    
+    def validate_email(self, value):
+        if not value:
+            return value
+        # Check for duplicates
+        queryset = Employee.objects.filter(email__iexact=value, status__in=['active', 'terminated'])
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("This email is already registered")
         return value
 
 
@@ -225,10 +255,21 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class CompanySerializer(serializers.ModelSerializer):
+    assigned_guards_details = serializers.SerializerMethodField()
+    profit_calculated = serializers.SerializerMethodField()
+    
     class Meta:
         model = Company
-        fields = 'id',  'name', 'location', 'guards_count', 'payment_to_us', 'payment_per_guard',
-        read_only_fields = ['total_payment_to_guards', 'profit', 'created_at', 'updated_at']
+        fields = [
+            'id', 'name', 'location', 'contact_number', 'contact_email', 'guards_count', 'payment_to_us', 
+            'payment_per_guard', 'total_payment_to_guards', 'profit',
+            'assigned_guards', 'assigned_guards_details', 'profit_calculated',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'total_payment_to_guards', 'profit', 'created_at', 'updated_at',
+            'profit_calculated'
+        ]
         
         extra_kwargs = {
             'name': {'required': True},
@@ -236,9 +277,22 @@ class CompanySerializer(serializers.ModelSerializer):
             'guards_count': {'required': True},
             'payment_to_us': {'required': True},
             'payment_per_guard': {'required': True},
-            # 'contact_email': {'required': True},
-            
+            'assigned_guards': {'required': False},
         }
+
+    def get_assigned_guards_details(self, obj):
+        """Return detailed info about assigned guards"""
+        return [
+            {
+                'id': str(g.id),
+                'name': g.name,
+                'employee_id': g.employee_id
+            } for g in obj.assigned_guards.all()
+        ]
+    
+    def get_profit_calculated(self, obj):
+        """Return calculated profit"""
+        return float(obj.profit) if obj.profit else 0
 
     def validate_name(self, value):
         if not value or not value.strip():
@@ -250,6 +304,12 @@ class SackedEmployeeSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.name', read_only=True)
     employee_id = serializers.CharField(source='employee.employee_id', read_only=True)
     employee_type = serializers.CharField(source='employee.type', read_only=True)
+    terminated_by_name = serializers.SerializerMethodField()
+
+    def get_terminated_by_name(self, obj):
+        if obj.terminated_by:
+            return obj.terminated_by.get_full_name() or obj.terminated_by.username
+        return '-'
 
     class Meta:
         model = SackedEmployee
