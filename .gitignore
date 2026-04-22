@@ -1,3 +1,5 @@
+
+.env 
 # Environment
 .env
 
@@ -33,10 +35,45 @@ Thumbs.db
 .mypy_cache/
 .coverage
 htmlcov/
+
 # dedc att
 backend_admin\fotasco_payroll\payroll\attendance_deductions.py"
+staticfiles/
+staticfiles
+staticfile
+staticfile/
+
 media/
 .env
 __pycache__/
 *.pyc
 db.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+
+# Django
+db.sqlite3
+/media/
+staticfiles/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,353 @@
+# serializers.py — single source of truth for all serializers.
+# Keep all classes here. The split files (attendance_serializer.py etc.)
+# in your project should either be deleted or import FROM this file.
+# Every test and view does `from payroll.serializers import X`.
+
+from rest_framework import serializers
+from .models import (
+    Employee, Attendance, Deduction, Payment,
+    Company, SackedEmployee, Notification, OTP, ExportToken,
+)
+from django.contrib.auth import get_user_model
+import base64
+from django.core.files.base import ContentFile
+from .image_utils import compress_and_validate_image
+from django.utils import timezone
+from django.db import transaction
+import re
+
+User = get_user_model()
+
+
+class UserSerializer(serializers.ModelSerializer):
+    employee_id = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'role', 'phone', 'employee_id',
+            'is_company_admin', 'is_notification_admin', 'is_payment_admin',
+            'is_deduction_admin', 'is_employee_admin',
+            'first_name', 'last_name',
+            'is_superuser', 'is_staff', 'is_active',
+            'date_joined', 'last_login', 'groups', 'user_permissions',
+        ]
+        read_only_fields = ['id']
+
+    def get_employee_id(self, obj):
+        if hasattr(obj, 'employee_profile'):
+            return obj.employee_profile.employee_id
+        return None
+
+    def validate_email(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("email is required")
+        value = value.lower()
+        if User.objects.filter(email=value).exclude(
+            id=self.instance.id if self.instance else None
+        ).exists():
+            raise serializers.ValidationError("Email already exists")
+        return value
+
+    def validate_phone(self, value):
+        if not re.match(r'^[\d\s\-\+\(\)]{10,20}$', value):
+            raise serializers.ValidationError("Invalid phone format")
+        return value
+
+    def validate_role(self, value):
+        request = self.context.get("request")
+        if not request:
+            return value
+        if request.user.is_superuser:
+            return value
+        if value in ['admin', 'is_superuser']:
+            raise serializers.ValidationError("Not allowed to assign this role")
+        return value
+
+
+class EmployeeSerializer(serializers.ModelSerializer):
+    # REMOVED: user field that was causing serialization issues
+    # The user relationship is handled internally, not exposed in API
+
+    class Meta:
+        model = Employee
+        fields = [
+            'id', 'employee_id', 'name', 'type', 'location', 
+            'salary', 'phone', 'email', 'bank_name', 'account_number',
+            'account_holder', 'status', 'join_date', 'id_sequence', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['employee_id', 'id_sequence', 'created_at', 'updated_at', 'id']
+    
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Employee name cannot be empty")
+        return value
+
+    def validate_salary(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Salary cannot be negative")
+        return value
+        
+    def validate_account_number(self, value):
+        if not value:
+            return value
+        if len(value) != 10:
+            raise serializers.ValidationError("Account number must be exactly 10 digits")
+        if not value.isdigit():
+            raise serializers.ValidationError("Account number must contain only digits")
+        
+        # Check for duplicates excluding current instance (for updates)
+        queryset = Employee.objects.filter(account_number=value, status__in=['active', 'terminated'])
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("This account number is already registered")
+        
+        return value
+    
+    def validate_email(self, value):
+        if not value:
+            return value
+        # Check for duplicates
+        queryset = Employee.objects.filter(email__iexact=value, status__in=['active', 'terminated'])
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("This email is already registered")
+        return value
+
+
+class AttendanceSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_id = serializers.CharField(source='employee.employee_id', read_only=True)
+    clock_in_display = serializers.SerializerMethodField()
+    clock_out_display = serializers.SerializerMethodField()
+    clock_in_photo_base64 = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    clock_out_photo_base64 = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    
+    class Meta:
+        model = Attendance
+        fields = [
+            'id', 'employee', 'employee_id', 'employee_name', 'date', 'status',
+            'clock_in', 'clock_out', 'clock_in_timestamp', 'clock_out_timestamp', 'clock_in_photo', 'clock_out_photo',
+            'clock_in_display', 'clock_out_display', 'clock_in_photo_base64', 'clock_out_photo_base64',
+            'status', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'created_at', 'updated_at',
+            'clock_in_timestamp', 'clock_out_timestamp', 'clock-in-photo', 
+            'clock-out-photo', 'clock_in_display', 'clock_out_display', 'status', 'clock_in_photo_base64', 'clock_out_photo_base64'
+        ]
+
+    def get_clock_in_display(self, obj):
+        return obj.clock_in_timestamp.strftime('%Y-%m-%d %H:%M:%S') if obj.clock_in_timestamp else None
+
+    def get_clock_out_display(self, obj):
+        return obj.clock_out_timestamp.strftime('%Y-%m-%d %H:%M:%S') if obj.clock_out_timestamp else None
+
+    def validate(self, attrs):
+        employee = attrs.get('employee')
+        date = attrs.get('date')
+        if not employee:
+            raise serializers.ValidationError("Employee is required")
+        if not date:
+            raise serializers.ValidationError("Date is required")
+        if self.instance is None and Attendance.objects.filter(employee=employee, date=date).exists():
+            raise serializers.ValidationError("Attendance already exists for this employee on this date")
+        for field_value, field_name in [
+            (attrs.get('clock_in_photo_base64'), "Clock-in photo"),
+            (attrs.get('clock_out_photo_base64'), "Clock-out photo"),
+        ]:
+            if field_value:
+                try:
+                    base64.b64decode(field_value, validate=True)
+                except Exception:
+                    raise serializers.ValidationError(f"{field_name} must be valid base64")
+        if attrs.get('clock_out') and attrs.get('clock_in'):
+            if attrs['clock_out'] < attrs['clock_in']:
+                raise serializers.ValidationError("Clock-out cannot be before clock-in")
+        return attrs
+
+    def update(self, instance, validated_data):
+        if instance.clock_in and validated_data.get('clock_in'):
+            raise serializers.ValidationError("Already clocked in")
+        if instance.clock_out and validated_data.get('clock_out'):
+            raise serializers.ValidationError("Already clocked out")
+        clock_in_b64 = validated_data.pop('clock_in_photo_base64', None)
+        clock_out_b64 = validated_data.pop('clock_out_photo_base64', None)
+        if validated_data.get('clock_in') and not instance.clock_in_timestamp:
+            validated_data['clock_in_timestamp'] = timezone.now()
+        if validated_data.get('clock_out') and not instance.clock_out_timestamp:
+            validated_data['clock_out_timestamp'] = timezone.now()
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            if clock_in_b64:
+                instance.clock_in_photo = compress_and_validate_image(clock_in_b64)
+            if clock_out_b64:
+                instance.clock_out_photo = compress_and_validate_image(clock_out_b64)
+            instance.save()
+        return instance
+
+    def create(self, validated_data):
+        clock_in_b64 = validated_data.pop('clock_in_photo_base64', None)
+        clock_out_b64 = validated_data.pop('clock_out_photo_base64', None)
+        if validated_data.get('clock_in'):
+            validated_data['clock_in_timestamp'] = timezone.now()
+        if validated_data.get('clock_out'):
+            validated_data['clock_out_timestamp'] = timezone.now()
+        clock_in_img = compress_and_validate_image(clock_in_b64) if clock_in_b64 else None
+        clock_out_img = compress_and_validate_image(clock_out_b64) if clock_out_b64 else None
+        with transaction.atomic():
+            attendance = Attendance.objects.create(**validated_data)
+            if clock_in_img:
+                attendance.clock_in_photo = clock_in_img
+            if clock_out_img:
+                attendance.clock_out_photo = clock_out_img
+            attendance.save()
+        return attendance
+
+
+class DeductionSerializer(serializers.ModelSerializer):
+    employee_id = serializers.CharField(source='employee.employee_id', read_only=True)
+    employee_name = serializers.CharField(source='employee.name', read_only=True)
+    
+    class Meta:
+        model = Deduction
+        fields = ['id', 'employee', 'employee_id', 'employee_name', 'amount', 'reason', 'status', 'date', 'created_at']
+        read_only_fields = ['id', 'created_at']
+        extra_kwargs = {
+            'employee': {'required': True},
+            'amount': {'required': True},
+            'reason': {'required': True},
+            'status': {'required': False},
+            'date': {'required': False},
+        }
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Deduction must be greater than 0")
+        return value
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_id = serializers.CharField(source='employee.employee_id', read_only=True)
+    bank_account = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payment
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'transaction_reference']
+
+    def get_bank_account(self, obj):
+        return f"{obj.employee.bank_name} - {obj.employee.account_number}"
+
+    def validate_net_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Payment amount must be greater than 0")
+        return value
+
+    def validate(self, attrs):
+        if not attrs.get('employee'):
+            raise serializers.ValidationError("Employee is required")
+        return attrs
+
+
+class CompanySerializer(serializers.ModelSerializer):
+    assigned_guards_details = serializers.SerializerMethodField()
+    profit_calculated = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Company
+        fields = [
+            'id', 'name', 'location', 'contact_number', 'contact_email', 'guards_count', 'payment_to_us', 
+            'payment_per_guard', 'total_payment_to_guards', 'profit',
+            'assigned_guards', 'assigned_guards_details', 'profit_calculated',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'total_payment_to_guards', 'profit', 'created_at', 'updated_at',
+            'profit_calculated'
+        ]
+        
+        extra_kwargs = {
+            'name': {'required': True},
+            'location': {'required': True},
+            'guards_count': {'required': True},
+            'payment_to_us': {'required': True},
+            'payment_per_guard': {'required': True},
+            'assigned_guards': {'required': False},
+        }
+
+    def get_assigned_guards_details(self, obj):
+        """Return detailed info about assigned guards"""
+        return [
+            {
+                'id': str(g.id),
+                'name': g.name,
+                'employee_id': g.employee_id
+            } for g in obj.assigned_guards.all()
+        ]
+    
+    def get_profit_calculated(self, obj):
+        """Return calculated profit"""
+        return float(obj.profit) if obj.profit else 0
+
+    def validate_name(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Company name cannot be empty")
+        return value
+
+
+class SackedEmployeeSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_id = serializers.CharField(source='employee.employee_id', read_only=True)
+    employee_type = serializers.CharField(source='employee.type', read_only=True)
+    terminated_by_name = serializers.SerializerMethodField()
+
+    def get_terminated_by_name(self, obj):
+        if obj.terminated_by:
+            return obj.terminated_by.get_full_name() or obj.terminated_by.username
+        return '-'
+
+    class Meta:
+        model = SackedEmployee
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+
+class OTPSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OTP
+        fields = ['email', 'code', 'reference', 'expires_at']
+        read_only_fields = ['code', 'expires_at']
+
+    def validate_email(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Email is required")
+        return value.lower()
+
+    def validate(self, attrs):
+        if self.instance and self.instance.expires_at < timezone.now():
+            raise serializers.ValidationError("OTP has expired")
+        return attrs
+
+
+class ExportTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExportToken
+        fields = ['token', 'data_type', 'filters', 'expires_at']
+        read_only_fields = ['token', 'expires_at']
+
+    def validate_data_type(self, value):
+        if value not in ['attendance', 'payment', 'deduction']:
+            raise serializers.ValidationError("Invalid data type")
+        return value
