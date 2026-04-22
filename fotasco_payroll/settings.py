@@ -232,12 +232,11 @@ SIMPLE_JWT = {
 
 # CORS Settings REMOVIN all LATER
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "https://fot-pyroll.onrender.com", 
-    
+    "https://localhost:3000",
+    "https://127.0.0.1:8000",
+    "https://127.0.0.1:3000",
+    "https://localhost:5173",
+    "https://fot-pyroll.onrender.com",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -288,6 +287,9 @@ X_FRAME_OPTIONS = 'DENY'
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=True, cast=bool)
 SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=True, cast=bool)
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='').split(',')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Content Security Policy
 CSP_DEFAULT_SRC = ("'self'",)
